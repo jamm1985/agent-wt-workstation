@@ -1,0 +1,56 @@
+# Long scrollback history for each pane.
+set -g history-limit 100000
+
+# Pass terminal focus events through to applications.
+set -g focus-events on
+
+# Use vi-style keys in copy mode.
+setw -g mode-keys vi
+
+# Use zsh for new tmux panes/windows.
+set -g default-shell /usr/bin/zsh
+
+# Advertise tmux capabilities to applications inside panes.
+set -g default-terminal tmux-256color
+
+# Russian keyboard layout aliases for default prefix bindings.
+bind с new-window
+bind в detach-client
+bind т next-window
+bind з previous-window
+bind ц choose-tree -Zw
+bind ч kill-pane
+bind я resize-pane -Z
+bind щ select-pane -t :.+
+bind й display-panes
+bind ж last-pane
+bind д last-window
+bind х copy-mode
+bind ъ paste-buffer
+bind Б send-keys -K '<'
+bind Ю send-keys -K '>'
+
+# Russian keyboard aliases for vi copy mode.
+bind -T copy-mode-vi р send-keys -X cursor-left
+bind -T copy-mode-vi о send-keys -X cursor-down
+bind -T copy-mode-vi л send-keys -X cursor-up
+bind -T copy-mode-vi д send-keys -X cursor-right
+bind -T copy-mode-vi ц send-keys -X next-word
+bind -T copy-mode-vi и send-keys -X previous-word
+bind -T copy-mode-vi у send-keys -X next-word-end
+bind -T copy-mode-vi п send-keys -X history-top
+bind -T copy-mode-vi П send-keys -X history-bottom
+bind -T copy-mode-vi т send-keys -X search-again
+bind -T copy-mode-vi Т send-keys -X search-reverse
+bind -T copy-mode-vi й send-keys -X cancel
+bind -T copy-mode-vi м send-keys -X rectangle-toggle
+bind -T copy-mode-vi М send-keys -X select-line
+bind -T copy-mode-vi ';' send-keys -X end-of-line
+bind -T copy-mode-vi '.' command-prompt -T search -p "(search down)" \
+  { send-keys -X search-forward "%%" }
+bind -T copy-mode-vi ',' command-prompt -T search -p "(search up)" \
+  { send-keys -X search-backward "%%" }
+
+# choose-tree / Ctrl-b w
+bind -T tree-mode о send-keys Down
+bind -T tree-mode л send-keys Up

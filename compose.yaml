@@ -1,0 +1,68 @@
+x-default-env: &default-env
+  PYTHONUNBUFFERED: "1"
+  COLORTERM: "truecolor"
+
+x-platform: &platform ${DOCKER_PLATFORM:-linux/amd64}
+
+x-default-args: &default-args
+  TZ: ${TZ:-Asia/Vladivostok}
+  DOCKER_HOST_UID: ${DOCKER_HOST_UID:-1000}
+  DOCKER_HOST_GID: ${DOCKER_HOST_GID:-1000}
+  DOCKER_USER: ${DOCKER_USER:-developer}
+  DOCKER_USER_HOME: ${DOCKER_USER_HOME:-/home/developer}
+  MIRROR_LIST_COUNTRY: ${MIRROR_LIST_COUNTRY:-DE}
+  COC_EXTENSIONS: ${COC_EXTENSIONS:?COC_EXTENSIONS must be set}
+  BUILD_PACKAGES: ${BUILD_PACKAGES:?BUILD_PACKAGES must be set}
+
+x-runtime: &default-runtime
+  shm_size: 1g
+  ulimits:
+    core: 0
+    nofile:
+      soft: 10000
+      hard: 10000
+
+x-workspace: &workspace
+  type: bind
+  source: ${WORK_ROOT:?WORK_ROOT must be set}
+  target: /workspace
+
+services:
+  agent:
+    platform: *platform
+    <<: *default-runtime
+    build:
+      context: .
+      args: *default-args
+    environment:
+      <<: *default-env
+    stdin_open: true
+    tty: true
+    command:
+      - zsh
+    volumes:
+      - *workspace
+      - type: volume
+        source: gemini-auth
+        target: ${DOCKER_USER_HOME:-/home/developer}/.gemini
+      - type: volume
+        source: codex-auth
+        target: ${DOCKER_USER_HOME:-/home/developer}/.codex
+      - type: volume
+        source: uv-cache
+        target: ${DOCKER_USER_HOME:-/home/developer}/.cache/uv
+      - type: volume
+        source: uv-data
+        target: ${DOCKER_USER_HOME:-/home/developer}/.local/share/uv
+networks:
+  default:
+    enable_ipv6: true
+volumes:
+  codex-auth:
+    driver: local
+  gemini-auth:
+    driver: local
+  uv-cache:
+    driver: local
+  uv-data:
+    driver: local

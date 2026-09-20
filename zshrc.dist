@@ -1,0 +1,94 @@
+export EDITOR=vim
+
+# looking
+autoload -Uz vcs_info
+zstyle ':vcs_info:*' enable git
+zstyle ':vcs_info:git:*' formats '%F{yellow}git:%b%f'
+precmd() {
+  vcs_info
+}
+setopt PROMPT_SUBST
+PROMPT='
+%F{cyan}%~%f ${vcs_info_msg_0_}
+%F{green}>%f '
+RPROMPT='%F{blue}%D{%H:%M:%S}%f %(?..%F{red}exit:%?%f)'
+
+# Completion
+fpath=(/usr/share/zsh/site-functions $fpath)
+
+zstyle ':completion:*' menu no
+zstyle ':completion:*' verbose yes
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
+
+autoload -Uz compinit
+compinit -d "$HOME/.cache/zcompdump-$ZSH_VERSION"
+
+# fzf shell integration
+source <(fzf --zsh)
+
+export FZF_DEFAULT_OPTS="--style full"
+
+_fzf_comprun() {
+  local command=$1
+  shift
+
+  case "$command" in
+    cd)
+      fzf \
+        --preview 'eza -1 --color=always --group-directories-first {} 2>/dev/null || ls -1 {}' \
+        "$@"
+      ;;
+
+    export|unset)
+      fzf --preview 'printenv {}' "$@"
+      ;;
+
+    ssh)
+      fzf --preview 'dig {}' "$@"
+      ;;
+
+    *)
+      fzf \
+        --preview '[[ -d {} ]] && (eza -la --color=always {} 2>/dev/null || ls -la {}) || (bat -n --color=always {} 2>/dev/null || head -200 {})' \
+        "$@"
+      ;;
+  esac
+}
+
+# fzf-tab
+source "$HOME/.local/share/fzf-tab/fzf-tab.plugin.zsh"
+
+zstyle ':fzf-tab:*' switch-group '<' '>'
+zstyle ':fzf-tab:*' show-group full
+zstyle ':fzf-tab:*' fzf-flags \
+  --height=60% \
+  --layout=reverse \
+  --border \
+  --info=inline
+
+zstyle ':fzf-tab:complete:cd:*' fzf-preview \
+  'eza -1 --color=always --group-directories-first $realpath'
+
+zstyle ':fzf-tab:complete:(vim|nvim|nano|code|bat|cat|less):*' fzf-preview \
+  '[[ -d $realpath ]] && eza -la --color=always $realpath || bat -n --color=always $realpath'
+
+zstyle ':fzf-tab:complete:git-checkout:*' fzf-preview \
+  'git log --oneline --graph --decorate --color=always -n 15 $word 2>/dev/null'
+
+zstyle ':fzf-tab:complete:git-switch:*' fzf-preview \
+  'git log --oneline --graph --decorate --color=always -n 15 $word 2>/dev/null'
+
+# History
+HISTFILE="$HOME/.local/state/zsh/history"
+HISTSIZE=50000
+SAVEHIST=50000
+
+mkdir -p "${HISTFILE:h}"
+
+setopt APPEND_HISTORY
+setopt SHARE_HISTORY
+# setopt INC_APPEND_HISTORY
+setopt HIST_REDUCE_BLANKS
+setopt EXTENDED_HISTORY

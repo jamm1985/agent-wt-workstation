@@ -1,0 +1,11 @@
+# Local configuration copied from distribution templates.
+/.env
+/.zshrc
+/.vimrc
+/.tmux.conf
+/.coc-settings.json
+
+# Vim swap and backup files.
+*.swp
+*.swo
+*~
