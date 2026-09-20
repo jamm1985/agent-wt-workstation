@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-smoke:
+    if: >-
+      github.event_name != 'push' ||
+      github.ref == format(
+        'refs/heads/{0}', github.event.repository.default_branch
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare configuration
+        id: prepare
+        run: |
+          cp env.dist .env
+          cp zshrc.dist .zshrc
+          cp tmux.conf.dist .tmux.conf
+          cp vimrc.dist .vimrc
+          cp coc-settings.json.dist .coc-settings.json
+          mkdir -p "$RUNNER_TEMP/workspace"
+          {
+            echo "WORK_ROOT=$RUNNER_TEMP/workspace"
+            echo "DOCKER_HOST_UID=$(id -u)"
+            echo "DOCKER_HOST_GID=$(id -g)"
+          } >> "$GITHUB_ENV"
+
+      - name: Validate configuration
+        run: |
+          docker compose config --quiet
+          python3 -m json.tool .coc-settings.json > /dev/null
+
+      - name: Build image
+        run: docker compose build --pull
+
+      - name: Smoke test
+        timeout-minutes: 3
+        run: |
+          docker compose run --rm -T agent bash -seu <<'SH'
+          git --version
+          python --version
+          uv --version
+          node --version
+          codex --version
+          gemini --version
+          zsh -n "$HOME/.zshrc"
+          zsh -fec 'source "$HOME/.zshrc"'
+          vim -Nu "$HOME/.vimrc" -n -i NONE -es -c 'qa!'
+          trap 'tmux -L ci kill-server 2>/dev/null || true' EXIT
+          tmux -L ci -f /dev/null new-session -d -s smoke 'sleep 60'
+          tmux -L ci source-file "$HOME/.tmux.conf"
+          tmux -L ci has-session -t smoke
+          SH
+
+      - name: Clean up
+        if: ${{ always() && steps.prepare.outcome == 'success' }}
+        run: docker compose down --volumes --remove-orphans
