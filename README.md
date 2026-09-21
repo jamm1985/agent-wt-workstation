@@ -10,6 +10,7 @@
 * [Worktree workflow](#worktree-workflow)
   * [Prepare the task](#prepare-the-task)
   * [Work inside the task](#work-inside-the-task)
+  * [Detached agent sessions](#detached-agent-sessions)
 * [Related projects](#related-projects)
 
 <!-- vim-markdown-toc -->
@@ -224,6 +225,27 @@ uv run pytest
 
 Repeat environment setup and validation for each Python repository you change.
 Each worktree keeps its own `.venv`.
+
+### Detached agent sessions
+
+To keep agents running after you close the host terminal, start a container
+in the background. After preparing the task, run these commands on the host
+from this template's directory:
+
+```bash
+docker compose run --rm -d --name task-31337 agent sleep infinity
+
+docker exec task-31337 tmux new-session -d -s agents -n codex \
+  -c /workspace/tasks/task-31337 'codex --sandbox danger-full-access'
+docker exec task-31337 tmux new-window -d -t agents -n gemini \
+  -c /workspace/tasks/task-31337 'gemini'
+
+docker exec -it task-31337 tmux attach -t agents
+```
+
+Use `Ctrl-b w` to switch windows and `Ctrl-b d` to detach. Repeat the last
+command to reconnect. Agents keep running while the container is running;
+stop it with `docker stop task-31337`.
 
 ## Related projects
 
