@@ -4,6 +4,9 @@ set -g history-limit 100000
 # Pass terminal focus events through to applications.
 set -g focus-events on
 
+# Theme preset
+ set -s theme light
+
 # Use vi-style keys in copy mode.
 setw -g mode-keys vi
 

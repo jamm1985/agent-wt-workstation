@@ -11,6 +11,7 @@
   * [Prepare the task](#prepare-the-task)
   * [Work inside the task](#work-inside-the-task)
   * [Detached agent sessions](#detached-agent-sessions)
+* [Updating the workstation](#updating-the-workstation)
 * [Related projects](#related-projects)
 
 <!-- vim-markdown-toc -->
@@ -108,6 +109,8 @@ Run the editor, agents and project commands in tmux windows. Use `Ctrl-b c`
 to open a window and `Ctrl-b d` to return to the container shell. Reattach
 with `tmux attach -t workstation`.
 
+In zsh, press `Ctrl-X Ctrl-E` to edit the current command in Vim.
+
 Exiting that outer shell stops and removes the container. Workspace files and
 named volumes persist; tmux sessions end when the container stops.
 
@@ -121,6 +124,15 @@ every repository it needs. The original checkouts keep their branches and local
 changes, while the task worktrees share their repositories' Git history.
 The editor, agent and shell use the same files inside the container.
 
+The task directory is not a Git repository. Its `AGENTS.md` holds the goal and
+working rules. For work across multiple steps, sessions or repositories, the
+agent also maintains `TASK.md` with the goal, scope, current plan, decisions,
+dated check results and next steps. Small, self-contained requests can skip it.
+
+The agent updates these notes as work progresses and reads them at task start
+and after context loss or compaction. Before continuing, it checks the notes
+against current instructions and repository state.
+
 For `task-31337`, use `repo-1` and `repo-2` for changes, and `repo-3` for
 context:
 
@@ -132,6 +144,7 @@ context:
 └── tasks/
     └── task-31337/
         ├── AGENTS.md
+        ├── TASK.md
         ├── repo-1/  # feat/task-31337
         ├── repo-2/  # feat/task-31337
         └── repo-3/  # detached at origin/master
@@ -140,8 +153,17 @@ context:
 ### Prepare the task
 
 The examples assume existing clones with up-to-date `origin/master` refs;
-use `origin/main` if appropriate. Run these commands on the host, from this
-template's directory:
+use `origin/main` if appropriate.
+
+`--no-track` creates each task branch without setting `origin/master` as its
+upstream. The same branch name belongs to two independent repositories.
+`--detach` checks out the current `origin/master` commit without a new branch.
+It does not prevent writes: treat `repo-3` as context-only.
+
+Keep the original repositories and worktrees under `WORK_ROOT`. This makes
+the `--relative-paths` links valid both on the host and under `/workspace`.
+
+Run these commands on the host, from this template's directory:
 
 ```bash
 mkdir -p ~/git/tasks/task-31337
@@ -169,20 +191,17 @@ git -C ~/git/repo-3 worktree add \
 cp -n AGENTS-dist.md ~/git/tasks/task-31337/AGENTS.md
 ```
 
-`--no-track` creates each task branch without setting `origin/master` as its
-upstream. The same branch name belongs to two independent repositories.
-`--detach` checks out the current `origin/master` commit without a new branch.
-It does not prevent writes: treat `repo-3` as context-only.
-
-The `WORK_ROOT=${HOME}/git` setting above mounts the whole common root so that
-`--relative-paths` links remain valid between the original repositories and
-worktrees when `~/git` becomes `/workspace`.
-
 Edit the task's `AGENTS.md` to describe the goal, allow changes in `repo-1` and
 `repo-2`, and mark `repo-3` as context-only. Include instructions to read each
 repository's own `AGENTS.md` before working in it.
 
 ### Work inside the task
+
+The [task instructions](AGENTS-dist.md) require the agent to show a complete
+diff and get your approval before editing project files. Existing approval
+for the same changes still applies. After editing, it reports the applied
+diff and check results. Untracked task notes need no separate approval, but
+their diffs are shown too.
 
 Start a container from this template's directory on the host:
 
@@ -206,46 +225,85 @@ codex --sandbox danger-full-access
 The agent has write access to the mounted workspace.
 
 Starting here loads the task's `AGENTS.md` and gives the agent one directory
-containing all three repositories. The task directory is not a Git repository.
-Review changes per repository, then commit and push from its worktree on the
-host.
+containing all three repositories. Review changes per repository, then commit
+and push from its worktree on the host.
 
 Use other tmux windows for Vim, a shell and project tools. Run tools from the
-relevant worktree, using its own environment. For example, in a Python 3.12
-project with `uv.lock` and Ruff and pytest declared as dependencies:
+relevant worktree, using its own environment. Choose checks from the
+repository's instructions and CI configuration.
+
+Environment setup needs separate approval. Before creating or syncing an
+environment or installing tools, the agent must explain why, show the commands
+and affected paths, and get your approval.
+
+For a Python 3.12 project with `uv.lock`, Ruff and pytest declared as
+dependencies, prepare the environment yourself or approve the agent running:
 
 ```bash
 cd /workspace/tasks/task-31337/repo-1
 uv sync --locked --python 3.12
-uv run python --version
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest
 ```
 
-Repeat environment setup and validation for each Python repository you change.
-Each worktree keeps its own `.venv`.
+Once the environment, interpreter and tools are available, run the checks
+from the same worktree without syncing the environment:
+
+```bash
+uv run --no-sync python --version
+uv run --no-sync ruff check --no-fix .
+uv run --no-sync ruff format --check .
+uv run --no-sync pytest
+```
+
+Each worktree keeps its own `.venv`. Repeat setup only where needed and run
+the required checks for each repository you change.
 
 ### Detached agent sessions
 
-To keep agents running after you close the host terminal, start a container
-in the background. After preparing the task, run these commands on the host
-from this template's directory:
+Run tmux as the container's main process so sessions stay alive after you
+disconnect. After preparing the task, run these commands on the host from
+this template's directory:
 
 ```bash
-docker compose run --rm -d --name task-31337 agent sleep infinity
+docker compose run --rm -d --name task-31337 agent tmux -D
 
-docker exec task-31337 tmux new-session -d -s agents -n codex \
-  -c /workspace/tasks/task-31337 'codex --sandbox danger-full-access'
-docker exec task-31337 tmux new-window -d -t agents -n gemini \
-  -c /workspace/tasks/task-31337 'gemini'
-
-docker exec -it task-31337 tmux attach -t agents
+docker exec -it task-31337 tmux new -A -s agents_threads \
+  -c /workspace/tasks/task-31337
 ```
 
-Use `Ctrl-b w` to switch windows and `Ctrl-b d` to detach. Repeat the last
-command to reconnect. Agents keep running while the container is running;
-stop it with `docker stop task-31337`.
+Inside tmux, run `codex --sandbox danger-full-access` or `gemini`. Use
+`Ctrl-b c` to create windows, `Ctrl-b w` to switch and `Ctrl-b d` to detach.
+
+Reconnect from the host:
+
+```bash
+docker exec -it task-31337 tmux attach -t agents_threads
+```
+
+Stop the container with `docker stop task-31337`.
+
+## Updating the workstation
+
+Merge the relevant `*.dist` changes into your local configuration files,
+preserving your settings. Changes to `.zshrc`, `.tmux.conf`, `.vimrc` or
+`.coc-settings.json` require rebuilding the image and starting a new container.
+
+Stop the old container, then run on the host from this repository's directory:
+
+```bash
+docker compose build
+docker compose run --rm agent
+```
+
+In a tmux window inside the new container, resume Codex from your task
+directory:
+
+```bash
+cd /workspace/tasks/task-31337
+codex --sandbox danger-full-access resume
+```
+
+Update each task's `AGENTS.md` separately from `AGENTS-dist.md`, preserving
+its goal and scope.
 
 ## Related projects
 
